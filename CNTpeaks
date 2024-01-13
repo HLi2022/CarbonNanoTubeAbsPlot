@@ -1,0 +1,116 @@
+import tkinter as tk
+from tkinter import ttk
+from tkinter import filedialog
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import itertools
+
+class CarbonNanoTubeApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+
+        self.title("Carbon Nanotube Data Viewer")
+        self.geometry("800x800")
+
+        self.data = None
+
+        self.create_widgets()
+
+        self.color_cycle = itertools.cycle(['b', 'g', 'r', 'c', 'm', 'y', 'k'])
+        self.fig, self.ax = plt.subplots()
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.plot_frame)
+        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        
+    def create_widgets(self):
+        self.input_frame = ttk.Frame(self)
+        self.input_frame.pack(side=tk.TOP, pady=10)
+
+        self.n_label = ttk.Label(self.input_frame, text="n:")
+        self.n_label.grid(row=0, column=0, padx=5)
+        self.n_entry = ttk.Entry(self.input_frame, width=5)
+        self.n_entry.grid(row=0, column=1)
+
+        self.m_label = ttk.Label(self.input_frame, text="m:")
+        self.m_label.grid(row=0, column=2, padx=5)
+        self.m_entry = ttk.Entry(self.input_frame, width=5)
+        self.m_entry.grid(row=0, column=3)
+
+        self.search_button = ttk.Button(self.input_frame, text="Search", command=self.search_data)
+        self.search_button.grid(row=0, column=4, padx=5)
+
+        self.open_button = ttk.Button(self.input_frame, text="Open File", command=self.open_file)
+        self.open_button.grid(row=0, column=5, padx=5)
+
+        self.tree_view = ttk.Treeview(self, columns=("diameter", "chiral_angle", "mod_type", "S11", "S22",
+                                                     "RBM", "wl11", "wl22", "index_n", "index_m", "SDS%"),
+                                       show="headings")
+        self.tree_view.pack(fill=tk.BOTH, expand=True)
+
+        for col in ("diameter", "chiral_angle", "mod_type", "S11", "S22", "RBM", "wl11", "wl22", "index_n",
+                    "index_m", "SDS%"):
+            self.tree_view.heading(col, text=col)
+
+        self.plot_frame = ttk.Frame(self)
+        self.plot_frame.pack(fill=tk.BOTH, expand=True)
+
+    def load_data(self, file_path):
+        self.data = pd.read_csv(file_path)
+
+    def search_data(self):
+        try:
+            n = int(self.n_entry.get())
+            m = int(self.m_entry.get())
+            filtered_data = self.data[(self.data["index_n"] == n) & (self.data["index_m"] == m)]
+
+            for index, row in filtered_data.iterrows():
+                index_n = int(row["index_n"])
+                index_m = int(row["index_m"])
+                self.tree_view.insert("", "end", values=(round(row["diameter"], 2), round(row["chiral_angle"], 2),
+                                                     row["mod_type"], row["S11"], row["S22"], row["RBM"], row["wl11"],
+                                                     row["wl22"], index_n, index_m, row["SDS%"]))
+            if filtered_data.empty:
+                messagebox.showerror("Error", "No data found for the given (n, m) pair.")
+            else:
+                color = next(self.color_cycle)
+                self.plot_spectrum(filtered_data, color)
+        except ValueError:
+            pass
+
+
+    def open_file(self):
+        file_path = filedialog.askopenfilename()
+        if file_path:
+            self.load_data(file_path)
+
+    def gaussian(self, x, mu, sigma, amplitude):
+        return amplitude * np.exp(-(x - mu) ** 2 / (2 * sigma ** 2))
+
+    def plot_spectrum(self, filtered_data, color):
+        for index, row in filtered_data.iterrows():
+            wl11 = row["wl11"]
+            wl22 = row["wl22"]
+            x = np.linspace(min(wl11, wl22) - 50, max(wl11, wl22) + 50, 1000)
+            y1 = self.gaussian(x, wl11, 5, 1)
+            y2 = self.gaussian(x, wl22, 5, 0.5)
+            
+            color = next(self.color_cycle)
+            
+            self.ax.plot(x, y1, label=f" ({int(row['index_n'])},{int(row['index_m'])})", color=color)
+            self.ax.plot(x, y2, color=color)
+
+        self.ax.legend()
+        self.ax.set_xlabel("Wavelength (nm)")
+        self.ax.set_ylabel("Absorbance")
+        self.ax.set_title("Simulated Absorption Spectrum")
+        self.canvas.draw()
+
+
+
+
+    
+if __name__ == "__main__":
+    app = CarbonNanoTubeApp()
+    app.mainloop()
+
